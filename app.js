@@ -421,8 +421,9 @@ async function renderArchive() {
   records.forEach((record) => {
     const item = document.createElement("div");
     item.className = "archive-item";
-    const label = record.metadata.category === "calibration" ? `キャリブレーション ${record.metadata.calibration_bpm} BPM` : `提示順 ${record.metadata.presentation_order} / ${record.metadata.stimulus_file}`;
-    item.innerHTML = `<p><strong>${record.name}</strong></p><p class="hint">被験者 ${record.metadata.participant_id} / ${label}</p>`;
+    const label = record.metadata.category === "calibration"
+  ? `キャリブレーション ${record.metadata.calibration_bpm} BPM`
+  : `${record.metadata.task} / 提示順 ${record.metadata.presentation_order} / ${record.metadata.stimulus_file}`;
     const edit = document.createElement("button");
     edit.textContent = "アーカイブメモを更新";
     edit.onclick = () => editArchive(record);
