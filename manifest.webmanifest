@@ -1,8 +1,0 @@
-{
-  "name": "Groove iPad Recorder",
-  "short_name": "Groove録画",
-  "start_url": "./",
-  "display": "standalone",
-  "background_color": "#102936",
-  "theme_color": "#12313f"
-}
