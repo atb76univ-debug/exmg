@@ -268,14 +268,24 @@ async function saveRecording() {
   const extension = type.includes("webm") ? "webm" : "mp4";
   const participant = $("participant").value;
   const category = recordingContext.category;
-  const identifier = category === "calibration" ? "calibration" : recordingContext.stimulusId;
-  const name = `${safeName(participant)}_${identifier}_${fileTimestamp(startedAt)}`;
+
+  // 通常試行では必ず「腕振り」または「自由身体運動」を記録する。
+  const taskLabel = category === "trial"
+    ? recordingContext.task
+    : "キャリブレーション";
+  const identifier = category === "calibration"
+    ? "metronome_8bars"
+    : recordingContext.stimulusId;
+
+  // 例: P001_腕振り_low1_2026-08-27T10-00-00Z.mp4
+  const name = `${safeName(participant)}_${safeName(taskLabel)}_${identifier}_${fileTimestamp(startedAt)}`;
+
   const metadata = {
     category,
     presentation_order: category === "trial" ? recordingContext.presentationOrder : "",
     experimenter_id: $("experimenter").value,
     participant_id: participant,
-    task: recordingContext.task,
+    task: taskLabel,
     condition: category === "trial" ? recordingContext.condition : "",
     stimulus_id: category === "trial" ? recordingContext.stimulusId : "",
     stimulus_file: category === "trial" ? recordingContext.stimulusFile : "metronome",
@@ -291,7 +301,14 @@ async function saveRecording() {
   };
 
   try {
-    await putRecord({ id: crypto.randomUUID(), name, startedAt: +startedAt, type, video: new Blob(chunks, { type }), metadata });
+    await putRecord({
+      id: crypto.randomUUID(),
+      name,
+      startedAt: +startedAt,
+      type,
+      video: new Blob(chunks, { type }),
+      metadata
+    });
     await renderArchive();
   } catch (error) {
     setStatus(`iPad内へ保存できません: ${error.message}`);
