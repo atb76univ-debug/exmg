@@ -84,7 +84,7 @@ function nextTrial() {
   if (position >= trials.length) {
     $("progress").textContent = "9試行が完了しました。被験者別に一括保存してください。";
     $("calibrate").disabled = false;
-    return status("課題完了です。");
+    return status("課題完了。");
   }
   active = { ...trials[position], presentationOrder:position + 1 };
   beginRecording(`試行 ${position + 1}/9：${active.stimulusFile}。録画開始、200フレーム待機中。`, playStimulus);
@@ -181,7 +181,7 @@ async function save() {
   try { await put({ id:crypto.randomUUID(), name, startedAt:+started, type, video:new Blob(chunks,{type}), metadata:meta }); await renderArchive(); }
   catch (error) { return status("iPad内へ保存できません: " + error.message); }
   if (active.category === "calibration") {
-    $("progress").textContent = "キャリブレーションを保存しました。9試行を開始できます。";
+    $("progress").textContent = "キャリブレーションを保存しました。試行を開始できます。";
     $("calibrate").disabled = false;
     $("start").disabled = false;
     return status("キャリブレーション完了です。");
