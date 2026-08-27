@@ -82,7 +82,7 @@ $("start").onclick = async () => {
 function nextTrial() {
   position += 1;
   if (position >= trials.length) {
-    $("progress").textContent = "9試行が完了しました。被験者別に一括保存してください。";
+    $("progress").textContent = "9試行が完了しました。参加者別に一括保存してください。";
     $("calibrate").disabled = false;
     return status("課題完了。");
   }
@@ -216,7 +216,7 @@ async function zip(files) {
 $("export").onclick = async () => {
   const participant=$("exportParticipant").value;
   const data=(await records()).filter(row=>row.metadata.participant_id===participant);
-  if(!data.length)return status("選択した被験者のデータはありません。");
+  if(!data.length)return status("選択した参加者のデータはありません。");
   const files=data.map(row=>({name:row.metadata.video_file,blob:row.video}));
   files.push({name:`${safe(participant)}_metadata.csv`,blob:new Blob([await csv(data)],{type:"text/csv;charset=utf-8"})});
   const file=new File([await zip(files)],`${safe(participant)}_groove_experiment.zip`,{type:"application/zip"});
