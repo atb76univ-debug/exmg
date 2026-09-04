@@ -1,13 +1,12 @@
 const $ = id => document.getElementById(id);
 const CONDITIONS = ["low", "medium", "high"];
 const LABEL = { low: "低", medium: "中", high: "高" };
-// 各課題（キャリブレーション・各試行）とも、録画開始から刺激音源（またはメトロノーム）再生までの待機時間を1分間に設定。
+// 録画開始後、映像が安定するまでのごく短い技術的な待機（カメラのフレーム供給を確認するため）。
 // requestVideoFrameCallback対応端末では実カメラフレーム数で計測するため、想定フレームレート(30fps)から目標フレーム数を算出する。
-const STIMULUS_DELAY_MS = 60000;
+const CAMERA_STABILIZE_MS = 6700;
 const ASSUMED_FPS = 30;
-const STIMULUS_DELAY_FRAMES = Math.round(STIMULUS_DELAY_MS / 1000 * ASSUMED_FPS);
-const STIMULUS_DELAY_WATCHDOG_MS = STIMULUS_DELAY_MS + 20000;
-let db, stream, ctx, recorder, source, recording = false, trials = [], position = -1, active, started, timer, frameTimer, chunks = [], sounds = {};
+const CAMERA_STABILIZE_FRAMES = Math.round(CAMERA_STABILIZE_MS / 1000 * ASSUMED_FPS);
+let db, stream, ctx, recorder, source, recording = false, trials = [], position = -1, active, started, timer, frameTimer, chunks = [], sounds = {}, firstTrialLeadIn = 0;
 
 function status(text) { $("status").textContent = text; }
 function safe(text) { return text.replace(/[^a-zA-Z0-9_-]/g, "_"); }
@@ -78,14 +77,22 @@ $("calibrate").onclick = async () => {
   const bpm = Number($("bpm").value);
   if (!Number.isFinite(bpm) || bpm < 30 || bpm > 240) return status("BPMは30〜240で設定してください。");
   try { await preflight(); } catch (error) { return status(error.message); }
-  active = { category:"calibration", task:"キャリブレーション", bpm, bars:8, beats:32 };
-  beginRecording("キャリブレーション：録画開始（合図音）、1分間待機中。", () => metronome(bpm, 32));
+  active = { category:"calibration", task:"キャリブレーション", bpm, bars:8, beats:32, delayFrames:0 };
+  beginRecording("キャリブレーション：録画開始（合図音）。メトロノームを再生します。", () => metronome(bpm, 32), 0);
 };
 
 $("start").onclick = async () => {
   try { await preflight(); } catch (error) { return status(error.message); }
   $("start").disabled = true;
-  nextTrial();
+  const leadIn = Math.max(0, Number($("leadIn").value) || 0);
+  if (leadIn > 0) {
+    $("progress").textContent = `試行列を開始しました。${leadIn}秒後に1試行目の録画を開始します。`;
+    status(`1試行目の録画開始まで${leadIn}秒お待ちください。`);
+    setTimeout(() => { firstTrialLeadIn = leadIn; nextTrial(); }, leadIn * 1000);
+  } else {
+    firstTrialLeadIn = 0;
+    nextTrial();
+  }
 };
 
 function nextTrial() {
@@ -95,11 +102,11 @@ function nextTrial() {
     $("calibrate").disabled = false;
     return status("課題完了。");
   }
-  active = { ...trials[position], presentationOrder:position + 1 };
-  beginRecording(`試行 ${position + 1}/9：${active.stimulusFile}。録画開始（合図音）、1分間待機中。`, playStimulus);
+  active = { ...trials[position], presentationOrder:position + 1, delayFrames:CAMERA_STABILIZE_FRAMES, leadInSeconds: position === 0 ? firstTrialLeadIn : "" };
+  beginRecording(`試行 ${position + 1}/9：${active.stimulusFile}。録画開始（合図音）。`, playStimulus);
 }
 
-function beginRecording(message, afterFrames) {
+function beginRecording(message, afterFrames, delayMs = CAMERA_STABILIZE_MS) {
   if (recording) return status("すでに録画中です。");
   chunks = [];
   started = new Date();
@@ -118,16 +125,18 @@ function beginRecording(message, afterFrames) {
   $("rec").hidden = false;
   timer = setInterval(() => { const s = Math.floor((Date.now() - started) / 1000); $("time").textContent = String(Math.floor(s/60)).padStart(2,"0") + ":" + String(s%60).padStart(2,"0"); }, 250);
   $("progress").textContent = message;
-  wait200(afterFrames);
+  wait200(afterFrames, delayMs);
 }
 
-function wait200(callback) {
-  frameTimer = setTimeout(() => fail("カメラフレームが停止したため、録画を中止しました。"), STIMULUS_DELAY_WATCHDOG_MS);
-  if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) return setTimeout(() => { clearTimeout(frameTimer); callback(); }, STIMULUS_DELAY_MS);
+function wait200(callback, delayMs = CAMERA_STABILIZE_MS) {
+  if (delayMs <= 0) return callback(); // 待機時間なし：録画開始（合図音）の直後に再生する
+  const delayFrames = Math.round(delayMs / 1000 * ASSUMED_FPS);
+  frameTimer = setTimeout(() => fail("カメラフレームが停止したため、録画を中止しました。"), delayMs + 20000);
+  if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) return setTimeout(() => { clearTimeout(frameTimer); callback(); }, delayMs);
   let frames = 0;
   const next = () => $("preview").requestVideoFrameCallback(() => {
     if (!liveCamera()) return fail("カメラ映像が停止したため、録画を中止しました。");
-    if (++frames >= STIMULUS_DELAY_FRAMES) { clearTimeout(frameTimer); callback(); } else next();
+    if (++frames >= delayFrames) { clearTimeout(frameTimer); callback(); } else next();
   });
   next();
 }
@@ -202,7 +211,7 @@ async function save() {
     participant_id:participant, task:active.task, condition:active.condition || "", stimulus_id:active.stimulusId || "",
     stimulus_file:active.stimulusFile || "metronome", calibration_bpm:active.bpm || "", calibration_bars:active.bars || "",
     calibration_beats:active.beats || "", started_at:started.toISOString(), finished_at:ended.toISOString(),
-    audio_start_frame_offset:STIMULUS_DELAY_FRAMES, video_file:`${name}.${ext}`, recording_includes_microphone_audio:true, archive_note:""
+    audio_start_frame_offset:active.delayFrames, lead_in_seconds:active.leadInSeconds ?? "", video_file:`${name}.${ext}`, recording_includes_microphone_audio:true, archive_note:""
   };
   try { await put({ id:crypto.randomUUID(), name, startedAt:+started, type, video:new Blob(chunks,{type}), metadata:meta }); await renderArchive(); }
   catch (error) { return status("iPad内へ保存できません: " + error.message); }
@@ -220,7 +229,7 @@ async function save() {
 
 function csvValue(value) { return `"${String(value ?? "").replaceAll('"','""')}"`; }
 async function csv(data) {
-  const fields = ["category","presentation_order","experimenter_id","participant_id","task","condition","stimulus_id","stimulus_file","calibration_bpm","calibration_bars","calibration_beats","started_at","finished_at","audio_start_frame_offset","video_file","recording_includes_microphone_audio","archive_note"];
+  const fields = ["category","presentation_order","experimenter_id","participant_id","task","condition","stimulus_id","stimulus_file","calibration_bpm","calibration_bars","calibration_beats","started_at","finished_at","audio_start_frame_offset","lead_in_seconds","video_file","recording_includes_microphone_audio","archive_note"];
   return [fields.join(","), ...data.map(row => fields.map(field => csvValue(row.metadata[field])).join(","))].join("\r\n");
 }
 
