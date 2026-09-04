@@ -1,6 +1,12 @@
 const $ = id => document.getElementById(id);
 const CONDITIONS = ["low", "medium", "high"];
 const LABEL = { low: "低", medium: "中", high: "高" };
+// 各課題（キャリブレーション・各試行）とも、録画開始から刺激音源（またはメトロノーム）再生までの待機時間を1分間に設定。
+// requestVideoFrameCallback対応端末では実カメラフレーム数で計測するため、想定フレームレート(30fps)から目標フレーム数を算出する。
+const STIMULUS_DELAY_MS = 60000;
+const ASSUMED_FPS = 30;
+const STIMULUS_DELAY_FRAMES = Math.round(STIMULUS_DELAY_MS / 1000 * ASSUMED_FPS);
+const STIMULUS_DELAY_WATCHDOG_MS = STIMULUS_DELAY_MS + 20000;
 let db, stream, ctx, recorder, source, recording = false, trials = [], position = -1, active, started, timer, frameTimer, chunks = [], sounds = {};
 
 function status(text) { $("status").textContent = text; }
@@ -46,7 +52,10 @@ $("prepare").onclick = async () => {
 $("camera").onclick = async () => {
   try {
     stream?.getTracks().forEach(track => track.stop());
-    stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:"environment" }, width:{ ideal:1280 }, height:{ ideal:720 } }, audio:true });
+    // 音声はecho cancellation/noise suppression/自動ゲイン調整(AGC)を明示的にOFFにする。
+    // これらがONだとiOSがマイク使用中に「音声通話用」処理を有効化し、スピーカー再生音量が
+    // 動的に上下（ダッキング）してしまい、音源再生中に音量が小さくなったりばらつく原因になる。
+    stream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:"environment" }, width:{ ideal:1280 }, height:{ ideal:720 } }, audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } });
     $("preview").srcObject = stream;
     $("preview").style.display = "block";
     $("previewText").hidden = true;
@@ -70,7 +79,7 @@ $("calibrate").onclick = async () => {
   if (!Number.isFinite(bpm) || bpm < 30 || bpm > 240) return status("BPMは30〜240で設定してください。");
   try { await preflight(); } catch (error) { return status(error.message); }
   active = { category:"calibration", task:"キャリブレーション", bpm, bars:8, beats:32 };
-  beginRecording("キャリブレーション：録画開始、200フレーム待機中。", () => metronome(bpm, 32));
+  beginRecording("キャリブレーション：録画開始（合図音）、1分間待機中。", () => metronome(bpm, 32));
 };
 
 $("start").onclick = async () => {
@@ -87,7 +96,7 @@ function nextTrial() {
     return status("課題完了。");
   }
   active = { ...trials[position], presentationOrder:position + 1 };
-  beginRecording(`試行 ${position + 1}/9：${active.stimulusFile}。録画開始、200フレーム待機中。`, playStimulus);
+  beginRecording(`試行 ${position + 1}/9：${active.stimulusFile}。録画開始（合図音）、1分間待機中。`, playStimulus);
 }
 
 function beginRecording(message, afterFrames) {
@@ -103,6 +112,7 @@ function beginRecording(message, afterFrames) {
   recorder.start(1000);
   if (recorder.state !== "recording") return status("録画を開始できませんでした。");
   recording = true;
+  beep();
   $("start").disabled = true;
   $("calibrate").disabled = true;
   $("rec").hidden = false;
@@ -112,12 +122,12 @@ function beginRecording(message, afterFrames) {
 }
 
 function wait200(callback) {
-  frameTimer = setTimeout(() => fail("カメラフレームが停止したため、録画を中止しました。"), 20000);
-  if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) return setTimeout(() => { clearTimeout(frameTimer); callback(); }, 6700);
+  frameTimer = setTimeout(() => fail("カメラフレームが停止したため、録画を中止しました。"), STIMULUS_DELAY_WATCHDOG_MS);
+  if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) return setTimeout(() => { clearTimeout(frameTimer); callback(); }, STIMULUS_DELAY_MS);
   let frames = 0;
   const next = () => $("preview").requestVideoFrameCallback(() => {
     if (!liveCamera()) return fail("カメラ映像が停止したため、録画を中止しました。");
-    if (++frames >= 200) { clearTimeout(frameTimer); callback(); } else next();
+    if (++frames >= STIMULUS_DELAY_FRAMES) { clearTimeout(frameTimer); callback(); } else next();
   });
   next();
 }
@@ -131,6 +141,22 @@ function playStimulus() {
     source.start();
     $("progress").textContent = `試行 ${position + 1}/9：音源再生中 ${active.stimulusFile}`;
   } catch (error) { fail("音源を再生できません: " + error.message); }
+}
+
+function beep() {
+  // 録画開始の合図として短い「ピッ」音を鳴らす。マイクにも入るため、録画された動画からも録画開始タイミングが分かる。
+  try {
+    const now = ctx.currentTime;
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.frequency.value = 1800;
+    gain.gain.setValueAtTime(.0001, now);
+    gain.gain.exponentialRampToValueAtTime(.3, now + .005);
+    gain.gain.exponentialRampToValueAtTime(.0001, now + .15);
+    oscillator.connect(gain).connect(ctx.destination);
+    oscillator.start(now);
+    oscillator.stop(now + .16);
+  } catch (error) { /* 合図音の失敗で録画自体は止めない */ }
 }
 
 function metronome(bpm, beats) {
@@ -176,7 +202,7 @@ async function save() {
     participant_id:participant, task:active.task, condition:active.condition || "", stimulus_id:active.stimulusId || "",
     stimulus_file:active.stimulusFile || "metronome", calibration_bpm:active.bpm || "", calibration_bars:active.bars || "",
     calibration_beats:active.beats || "", started_at:started.toISOString(), finished_at:ended.toISOString(),
-    audio_start_frame_offset:200, video_file:`${name}.${ext}`, recording_includes_microphone_audio:true, archive_note:""
+    audio_start_frame_offset:STIMULUS_DELAY_FRAMES, video_file:`${name}.${ext}`, recording_includes_microphone_audio:true, archive_note:""
   };
   try { await put({ id:crypto.randomUUID(), name, startedAt:+started, type, video:new Blob(chunks,{type}), metadata:meta }); await renderArchive(); }
   catch (error) { return status("iPad内へ保存できません: " + error.message); }
