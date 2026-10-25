@@ -111,7 +111,7 @@ $("camera").onclick = async () => {
     try { if (navigator.audioSession) navigator.audioSession.type = "play-and-record" } catch { }
     stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: FPS } },
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      audio: { channelCount: { ideal: 1 }, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
     });
     const v = $("preview"); v.srcObject = stream; v.style.display = "block"; $("previewText").hidden = true; await v.play();
     const fps = stream.getVideoTracks()[0].getSettings().frameRate;
