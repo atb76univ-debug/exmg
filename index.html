@@ -1,46 +1,12 @@
 <!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#12313f">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="style.css">
-  <title>実験用アプリ</title>
-</head>
-<body>
-  <main>
-    <h1>実験用アプリ</h1>
-    <p>キャリブレーションと課題(9試行)を実行</p>
-    <section class="preview"><video id="preview" playsinline muted autoplay></video><p id="previewText">カメラを開始</p><b id="rec" hidden>● REC <span id="time">00:00</span></b></section>
-    <section>
-      <h2>実験設定</h2>
-      <label>実験者ID<input id="experimenter" placeholder="E001"></label>
-      <label>参加者ID<input id="participant" placeholder="a101"></label>
-      <label>課題<select id="task"><option>腕振り</option><option>自由身体運動</option></select></label>
-      <label>試行間休憩（秒）<input id="rest" type="number" min="0" value="20"></label>
-      <label>1試行目開始までの待機（秒）<input id="leadIn" type="number" min="0" value="60"></label>
-      <h3>刺激音源（低・中・高を各3つ）</h3>
-      <p>音源を選択</p>
-      <div id="sounds"></div>
-      <button id="prepare">9音源を確認して試行順を作成</button><button id="camera" disabled>カメラ・マイクを開始</button>
-      <p id="status">IDと9音源を設定してください。</p>
-    </section>
-    <section>
-      <h2>キャリブレーション</h2>
-      <label>BPM<input id="bpm" type="number" min="30" max="240" value="120"></label>
-      <p>4拍×8小節（32拍）のメトロノームに合わせて腕を振る。</p>
-      <button id="calibrate" disabled>キャリブレーションを開始</button>
-    </section>
-    <section>
-      <h2>9試行</h2><p id="progress">試行順は未作成です。</p><button id="start" disabled>9試行を開始</button>
-    </section>
-    <section>
-      <h2>記録</h2>
-      <label>書き出す参加者<select id="exportParticipant"></select></label>
-      <button id="export" disabled>この参加者のCSV＋動画を一括保存</button>
-      <p></p><div id="archive"></div
-    </section>
-  </main><script src="app.js"></script>
-</body>
-</html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#12313f"><link rel="manifest" href="manifest.webmanifest"><link rel="stylesheet" href="style.css"><title>実験用アプリ</title></head>
+<body><main>
+  <h1>実験用アプリ</h1><p>60 fps録画・音声ミックス・刺激提示</p>
+  <section class="preview"><video id="preview" playsinline muted autoplay></video><p id="previewText">カメラを開始</p><b id="rec" hidden>● REC <span id="time">00:00</span></b></section>
+  <section><h2>実験設定</h2><label>実験者ID<input id="experimenter" placeholder="E001"></label><label>参加者ID<input id="participant" placeholder="a101"></label><label>試行間休憩（秒）<input id="rest" type="number" min="0" value="20"></label><label>1試行目開始までの待機（秒）<input id="leadIn" type="number" min="0" value="60"></label></section>
+  <section><h2>音源ライブラリ</h2><p>複数ファイルをまとめて登録できます。登録済み音源はこの端末に保存され、次回起動時にも利用できます。</p><input id="soundImport" type="file" accept="audio/*" multiple><button id="importSounds">選択した音源を一括登録</button><button id="clearLibrary" class="danger">ライブラリを消去</button><p id="libraryStatus" class="muted"></p><div id="library"></div></section>
+  <section><h2>刺激の割り当て</h2><p>本試行用リズム刺激（低・中・高を各3曲）</p><div id="trialSounds" class="grid"></div><p>練習用刺激（メトロノーム重畳リズム刺激、低→中→高）</p><div id="practiceSounds" class="grid"></div><p>自由運動用の実音楽刺激</p><label class="check"><input id="useParticipantMusic" type="checkbox" checked>参加者選択楽曲を再生する</label><select id="participantMusic"></select><label class="check"><input id="useExperimenterMusic" type="checkbox" checked>実験者選択楽曲を再生する</label><select id="experimenterMusic"></select><label class="check"><input id="useCreatedMusic" type="checkbox" checked>実験用制作楽曲を再生する（複数選択可・ランダム）</label><select id="createdMusic" multiple size="5"></select><button id="prepare">設定を確認して課題を準備</button><button id="camera" disabled>カメラ・マイクを開始</button><p id="status">IDを入力し、音源を登録・割り当ててください。</p></section>
+  <section><h2>腕振り課題</h2><p>メトロノーム・キャリブレーション → 練習3曲（低→中→高）→ 本試行9曲（ランダム）の順で実行します。</p><label>BPM<input id="bpm" type="number" min="30" max="240" value="120"></label><button id="startArm" disabled>腕振り課題を開始</button></section>
+  <section><h2>自由運動課題</h2><p>実音楽刺激（参加者選択→実験者選択→制作楽曲はランダム）と本試行は、休憩を挟めるよう別々に実行します。</p><button id="startFreeMusic" disabled>実音楽刺激を開始</button><button id="startFreeTrials" disabled>本試行9曲を開始</button><button id="stopPlayback" class="danger" disabled>再生・録画を中断</button><p id="progress">課題は未準備です。</p></section>
+  <section><h2>記録</h2><label>書き出す参加者<select id="exportParticipant"></select></label><button id="export" disabled>この参加者のCSV＋動画を保存</button><div id="archive"></div></section>
+</main><script src="app.js"></script></body></html>
