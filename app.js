@@ -1,5 +1,5 @@
 "use strict";
-const BUILD = "build 2026-10-26-c";
+const BUILD = "build 2026-10-26-d";
 const $ = id => document.getElementById(id);
 const C = ["low", "medium", "high"], L = { low: "低", medium: "中", high: "高" };
 const FPS = 60, DELAY = 100;
@@ -227,8 +227,8 @@ function beginRecording() {
     stopCurrent = () => { try { if (r.state === "recording") r.stop() } catch { } setTimeout(finished, 4000) };
     r.start(1000);
     recording = true; showRec(true, started); cue();
-    if (item.category === "calibration") { progress(`${tag}：録画中。メトロノーム再生中`); playMetronome(item) }
-    else { progress(`${tag}：録画開始。${DELAY}フレーム後に再生します。`); waitFrames(DELAY, () => playStimulus(item, tag)) }
+    progress(`${tag}：録画開始。${DELAY}フレーム後に再生します。`);
+    waitFrames(DELAY, () => item.category === "calibration" ? playMetronome(item, tag) : playStimulus(item, tag))
   } catch (e) { recording = false; showRec(false); fail("録画を開始できません: " + e.message) }
 }
 function waitFrames(n, cb) {
@@ -269,8 +269,9 @@ function playStimulus(item, tag) {
     progress(`${tag}：再生中 ${item.name}`);
   } catch (e) { fail("音源を再生できません: " + e.message) }
 }
-function playMetronome(item) {      // 合図音の直後に開始
-  const step = 60 / item.bpm, first = ctx.currentTime + .4;
+function playMetronome(item, tag) {   // 録画開始から100フレーム目に開始
+  progress(`${tag}：メトロノーム再生中（${item.bpm} BPM）`);
+  const step = 60 / item.bpm, first = ctx.currentTime + .08;
   for (let b = 0; b < item.beats; b++) {
     const o = ctx.createOscillator(), g = ctx.createGain(), t = first + b * step;
     o.frequency.value = b % 4 ? 880 : 1320;
